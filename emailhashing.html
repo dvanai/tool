@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Email Hasher</title>
+    <style>
+        #outputTable { display: none; margin-top: 20px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    </style>
+</head>
+<body>
+    <h2>Email Hasher</h2>
+    
+    <!-- Email Paste -->
+    <h3>Paste Emails</h3>
+    <textarea id="emailList" rows="5" placeholder="One email per line"></textarea>
+    <button onclick="processPastedEmails()">Process</button>
+
+    <!-- Results Display -->
+    <table id="outputTable">
+        <thead><tr><th>Original Email</th><th>Hashed Email</th></tr></thead>
+        <tbody id="outputBody"></tbody>
+    </table>
+    
+    <!-- Export Button -->
+    <button id="exportBtn" style="display: none;" onclick="exportCSV()">Export CSV</button>
+
+    <script>
+        let hashedData = [];
+
+        async function hashEmail(email) {
+            const normalized = email.trim().toLowerCase();
+            const encoder = new TextEncoder();
+            const data = encoder.encode(normalized);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            return Array.from(new Uint8Array(hashBuffer))
+                .map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function processCSV(csvText) {
+            const rows = csvText.split('\n');
+            const emailIndex = rows[0].split(',').indexOf('Email Address');
+            
+            hashedData = [];
+            for (let i = 1; i < rows.length; i++) {
+                if (rows[i].trim()) {
+                    const email = rows[i].split(',')[emailIndex];
+                    hashedData.push({
+                        original: email,
+                        hash: await hashEmail(email)
+                    });
+                }
+            }
+            displayResults();
+        }
+
+        async function processPastedEmails() {
+            const emails = document.getElementById('emailList').value.split('\n');
+            hashedData = [];
+            for (const email of emails) {
+                if (email.trim()) {
+                    hashedData.push({
+                        original: email.trim(),
+                        hash: await hashEmail(email.trim())
+                    });
+                }
+            }
+            displayResults();
+        }
+
+        function displayResults() {
+            const tbody = document.getElementById('outputBody');
+            tbody.innerHTML = '';
+            hashedData.forEach(item => {
+                tbody.innerHTML += `<tr><td>${item.original}</td><td>${item.hash}</td></tr>`;
+            });
+            document.getElementById('outputTable').style.display = 'table';
+            document.getElementById('exportBtn').style.display = 'inline-block';
+        }
+
+        function exportCSV() {
+            const csvContent = 'Original Email,Hashed Email\n' + 
+                hashedData.map(item => `"${item.original}","${item.hash}"`).join('\n');
+            
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'hashed_emails.csv';
+            a.click();
+        }
+
+        // Handle CSV file upload
+        document.getElementById('csvFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function() {
+                processCSV(reader.result);
+            };
+            reader.readAsText(file);
+        });
+    </script>
+</body>
+</html>

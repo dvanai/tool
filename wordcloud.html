@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Prompts Word Cloud from Table</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2em; }
+    #wordcloud { width: 700px; height: 400px; border: 1px solid #ccc; margin-top: 2em; }
+    #error { color: red; margin-top: 1em; }
+    #table { margin-top: 2em; }
+    table { border-collapse: collapse; width: 400px; }
+    th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: left; }
+    th { background: #f0f0f0; }
+  </style>
+</head>
+<body>
+  <h2>AI Prompts Word Cloud from Table</h2>
+  <input type="file" id="csvFile" accept=".csv" />
+  <div id="error"></div>
+  <div id="wordcloud"></div>
+  <div id="table"></div>
+
+  <!-- PapaParse for CSV parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <!-- wordcloud2.js for word cloud rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/wordcloud@1.2.2/src/wordcloud2.min.js"></script>
+  <!-- stopword.js for stopword removal -->
+  <script src="https://cdn.jsdelivr.net/npm/stopword/dist/stopword.umd.min.js"></script>
+  <script>
+    function buildTable(wordArray) {
+      // Sort wordArray by count descending
+      wordArray.sort((a, b) => b[1] - a[1]);
+
+      // Generate HTML table
+      let tableHTML = '<h3>Word Counts (Stopwords Removed)</h3><table id="wordTable"><tr><th>Word</th><th>Count</th></tr>';
+      wordArray.forEach(([word, count]) => {
+        tableHTML += `<tr><td>${word}</td><td>${count}</td></tr>`;
+      });
+      tableHTML += '</table>';
+      document.getElementById('table').innerHTML = tableHTML;
+    }
+
+    function generateWordCloudFromTable() {
+      const rows = document.querySelectorAll('#wordTable tr');
+      let wordArray = [];
+      for (let i = 1; i < rows.length; i++) { // skip header
+        const cells = rows[i].querySelectorAll('td');
+        const word = cells[0].textContent;
+        const count = parseInt(cells[1].textContent, 10);
+        if (word && count) {
+          wordArray.push([word, count]);
+        }
+      }
+      document.getElementById('wordcloud').innerHTML = '';
+      if (wordArray.length === 0) return;
+      // Use counts directly for weightFactor
+      WordCloud(document.getElementById('wordcloud'), {
+        list: wordArray,
+        gridSize: 10,
+        weightFactor: function (size) {
+          // Linear scaling: adjust multiplier as needed for your data
+          return size * 8;
+        },
+        fontFamily: 'Arial',
+        color: 'random-dark',
+        backgroundColor: '#fff',
+        rotateRatio: 0.5,
+        minSize: 12,
+      });
+    }
+
+    document.getElementById('csvFile').addEventListener('change', function(e) {
+      document.getElementById('error').textContent = '';
+      document.getElementById('wordcloud').innerHTML = '';
+      document.getElementById('table').innerHTML = '';
+      const file = e.target.files[0];
+      if (!file) return;
+
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+          const data = results.data;
+          if (!results.meta.fields.includes('AI Prompts')) {
+            document.getElementById('error').textContent = 'Error: "AI Prompts" column not found in CSV.';
+            return;
+          }
+
+          // Gather all text from the "AI Prompts" column
+          let allText = data.map(row => row['AI Prompts']).join(' ');
+          // Remove punctuation and split into words
+          let words = allText
+            .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()"\[\]?<>\\|]/g,"")
+            .toLowerCase()
+            .split(/\s+/)
+            .filter(w => w.length > 2);
+
+          // Remove stopwords using stopword.js (English)
+          words = sw.removeStopwords(words);
+
+          // Count word frequencies
+          let freq = {};
+          words.forEach(word => {
+            freq[word] = (freq[word] || 0) + 1;
+          });
+
+          // Prepare data for table and wordcloud
+          let wordArray = Object.entries(freq);
+
+          if (wordArray.length === 0) {
+            document.getElementById('error').textContent = 'No valid words found in "AI Prompts" column.';
+            return;
+          }
+
+          buildTable(wordArray);
+          generateWordCloudFromTable();
+        },
+        error: function(err) {
+          document.getElementById('error').textContent = 'Error parsing CSV: ' + err.message;
+        }
+      });
+    });
+  </script>
+</body>
+</html>
